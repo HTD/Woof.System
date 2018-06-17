@@ -152,8 +152,17 @@ namespace Woof.SystemEx {
 
         #region Classes
 
-        public class Host {
+        /// <summary>
+        /// Host entry.
+        /// </summary>
+        public struct Host {
+            /// <summary>
+            /// The name attribute.
+            /// </summary>
             public string HostName;
+            /// <summary>
+            /// IP address attribute.
+            /// </summary>
             public IPAddress IP;
         }
 
