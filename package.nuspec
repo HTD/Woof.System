@@ -2,7 +2,7 @@
 <package>
   <metadata>
     <id>Woof.System</id>
-    <version>1.0.1</version>
+    <version>1.0.2</version>
     <title>Woof.System</title>
     <authors>Adam Łyskawa</authors>
     <owners>CodeDog Ltd.</owners>
@@ -10,7 +10,7 @@
     <projectUrl>https://github.com/HTD/Woof.System</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>Advanced Windows system information tools.</description>
-    <releaseNotes>XML documentation completed.</releaseNotes>
+    <releaseNotes>SysInfo.AdminName and SysInfo.AdminSid properties added.</releaseNotes>
     <copyright>(c)2018 by CodeDog Ltd.</copyright>
     <tags>code codedog dotnet system</tags>
   </metadata>

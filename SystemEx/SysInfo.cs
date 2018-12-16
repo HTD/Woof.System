@@ -3,6 +3,7 @@ using System.DirectoryServices.AccountManagement;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.ServiceProcess; // add to references.
 using MbnApi; // add to references from: C:\Program Files (x86)\Windows Kits\10\Lib\{Build}\um\x86, requires Windows 10 SDK.
 using Microsoft.VisualBasic.Devices; // add to references.
@@ -75,6 +76,16 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
                 return new System.Security.Principal.SecurityIdentifier(Users.Single(i => i.Name == name).SID);
             }
         }
+
+        /// <summary>
+        /// Gets the name of the user who gave administrative rights to the current program.
+        /// </summary>
+        public static string AdminName => Users.FirstOrDefault(i => (string)i.SID == AdminSid).Name;
+
+        /// <summary>
+        /// Gets the SID of the user who gave administrative rights to the current program.
+        /// </summary>
+        public static string AdminSid => _AdminSid ?? (_AdminSid = NativeMethods.GetAdminSid());
 
         /// <summary>
         /// Gets unique device identifier based on mobile broadband network interface IMEI, system disk serial number or concatenation of physical networ adapters MAC addresses.
@@ -198,6 +209,7 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         static int? _CpuSpeed;
         static DGuid _DeviceId;
         static double _MemoryTotal;
+        static string _AdminSid;
         static string _ProfilesDirectory;
         static double _SystemMemoryTotal;
         static byte[] _WindowsDigitalProductId;
@@ -289,13 +301,107 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// </summary>
         static class NativeMethods {
 
+            #region Data types
+
+            enum TOKEN_INFORMATION_CLASS {
+                TokenUser = 1,
+                TokenGroups,
+                TokenPrivileges,
+                TokenOwner,
+                TokenPrimaryGroup,
+                TokenDefaultDacl,
+                TokenSource,
+                TokenType,
+                TokenImpersonationLevel,
+                TokenStatistics,
+                TokenRestrictedSids,
+                TokenSessionId,
+                TokenGroupsAndPrivileges,
+                TokenSessionReference,
+                TokenSandBoxInert,
+                TokenAuditPolicy,
+                TokenOrigin
+            }
+
+            #pragma warning disable CS0649
+            struct TOKEN_USER {
+                public SID_AND_ATTRIBUTES User;
+            }
+            #pragma warning restore CS0649
+
+            [StructLayout(LayoutKind.Sequential)]
+            struct SID_AND_ATTRIBUTES {
+                public IntPtr Sid;
+                public int Attributes;
+            }
+
+            #endregion
+
             /// <summary>
             /// Retrieves the amount of RAM that is physically installed on the computer.
             /// </summary>
             /// <param name="totalMemoryInKilobytes">A pointer to a variable that receives the amount of physically installed RAM, in kilobytes.</param>
             /// <returns>If the function succeeds, it returns TRUE and sets the TotalMemoryInKilobytes parameter to a nonzero value.</returns>
             [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-            public static extern bool GetPhysicallyInstalledSystemMemory(out IntPtr totalMemoryInKilobytes);
+            internal static extern bool GetPhysicallyInstalledSystemMemory(out IntPtr totalMemoryInKilobytes);
+
+            /// <summary>
+            /// The ConvertSidToStringSid function converts a security identifier (SID) to a string format suitable for display, storage, or transmission.
+            /// </summary>
+            /// <param name="sid">A pointer to the SID structure to be converted.</param>
+            /// <param name="stringSid">A pointer to a variable that receives a pointer to a null-terminated SID string. To free the returned buffer, call the LocalFree function.</param>
+            /// <returns></returns>
+            [DllImport("advapi32", CharSet = CharSet.Auto, SetLastError = true)]
+            static extern bool ConvertSidToStringSid(IntPtr sid, out IntPtr stringSid);
+
+            /// <summary>
+            /// Frees the specified local memory object and invalidates its handle.
+            /// </summary>
+            /// <param name="hMem">A handle to the local memory object. This handle is returned by either the LocalAlloc or LocalReAlloc function. It is not safe to free memory allocated with GlobalAlloc.</param>
+            /// <returns>If the function succeeds, the return value is NULL.</returns>
+            [DllImport("kernel32.dll")]
+            static extern IntPtr LocalFree(IntPtr hMem);
+
+            /// <summary>
+            /// Retrieves a specified type of information about an access token. The calling process must have appropriate access rights to obtain the information.
+            /// </summary>
+            /// <param name="tokenHandle">A handle to an access token from which information is retrieved. If TokenInformationClass specifies TokenSource, the handle must have TOKEN_QUERY_SOURCE access. For all other TokenInformationClass values, the handle must have TOKEN_QUERY access.</param>
+            /// <param name="tokenInformationClass">Specifies a value from the TOKEN_INFORMATION_CLASS enumerated type to identify the type of information the function retrieves. Any callers who check the TokenIsAppContainer and have it return 0 should also verify that the caller token is not an identify level impersonation token. If the current token is not an app container but is an identity level token, you should return AccessDenied.</param>
+            /// <param name="tokenInformation">A pointer to a buffer the function fills with the requested information. The structure put into this buffer depends upon the type of information specified by the TokenInformationClass parameter.</param>
+            /// <param name="tokenInformationLength">Specifies the size, in bytes, of the buffer pointed to by the TokenInformation parameter. If TokenInformation is NULL, this parameter must be zero.</param>
+            /// <param name="returnLength">A pointer to a variable that receives the number of bytes needed for the buffer pointed to by the TokenInformation parameter. If this value is larger than the value specified in the TokenInformationLength parameter, the function fails and stores no data in the buffer.</param>
+            /// <returns>If the function succeeds, the return value is nonzero.</returns>
+            [DllImport("advapi32.dll", SetLastError = true)]
+            static extern bool GetTokenInformation(
+                IntPtr tokenHandle,
+                TOKEN_INFORMATION_CLASS tokenInformationClass,
+                IntPtr tokenInformation,
+                int tokenInformationLength,
+                out int returnLength);
+
+            /// <summary>
+            /// Gets the SID of the elevated user account who run the current program.
+            /// </summary>
+            /// <returns>SID of administrator user.</returns>
+            internal static string GetAdminSid() {
+                var tokenInfLength = 0;
+                GetTokenInformation(WindowsIdentity.GetCurrent().Token, TOKEN_INFORMATION_CLASS.TokenUser, IntPtr.Zero, tokenInfLength, out tokenInfLength);
+                var tokenInformation = Marshal.AllocHGlobal(tokenInfLength);
+                try {
+                    if (GetTokenInformation(WindowsIdentity.GetCurrent().Token, TOKEN_INFORMATION_CLASS.TokenUser, tokenInformation, tokenInfLength, out tokenInfLength)) {
+                        var tokenUser = (TOKEN_USER)Marshal.PtrToStructure(tokenInformation, typeof(TOKEN_USER));
+                        var pstr = IntPtr.Zero;
+                        try {
+                            if (ConvertSidToStringSid(tokenUser.User.Sid, out pstr)) return Marshal.PtrToStringAuto(pstr);
+                        } finally {
+                            LocalFree(pstr);
+                        }
+                    }
+                } finally {
+                    Marshal.FreeHGlobal(tokenInformation);
+                }
+                return null;
+            }
 
         }
 
