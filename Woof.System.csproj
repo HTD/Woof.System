@@ -9,8 +9,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Woof</RootNamespace>
     <AssemblyName>Woof.System</AssemblyName>
-    <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -36,7 +37,7 @@
     <Reference Include="System.Core" />
     <Reference Include="System.DirectoryServices.AccountManagement" />
     <Reference Include="System.IO.Pipes.AccessControl, Version=4.0.3.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>packages\System.IO.Pipes.AccessControl.4.5.0\lib\net461\System.IO.Pipes.AccessControl.dll</HintPath>
+      <HintPath>packages\System.IO.Pipes.AccessControl.4.5.1\lib\net461\System.IO.Pipes.AccessControl.dll</HintPath>
     </Reference>
     <Reference Include="System.Management" />
     <Reference Include="System.Security" />
@@ -46,8 +47,8 @@
     <Reference Include="System.Security.Cryptography.ProtectedData, Version=4.0.3.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>packages\System.Security.Cryptography.ProtectedData.4.5.0\lib\net461\System.Security.Cryptography.ProtectedData.dll</HintPath>
     </Reference>
-    <Reference Include="System.Security.Principal.Windows, Version=4.1.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
-      <HintPath>packages\System.Security.Principal.Windows.4.5.0\lib\net461\System.Security.Principal.Windows.dll</HintPath>
+    <Reference Include="System.Security.Principal.Windows, Version=4.1.1.1, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
+      <HintPath>packages\System.Security.Principal.Windows.4.5.1\lib\net461\System.Security.Principal.Windows.dll</HintPath>
     </Reference>
     <Reference Include="System.ServiceProcess" />
     <Reference Include="System.Xml.Linq" />
@@ -56,11 +57,11 @@
     <Reference Include="System.Data" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Xml" />
-    <Reference Include="Woof.Core, Version=1.0.2.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\Woof.Core.1.0.2\lib\netstandard2.0\Woof.Core.dll</HintPath>
+    <Reference Include="Woof.Core, Version=1.0.11.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>packages\Woof.Core.1.0.11\lib\netstandard2.0\Woof.Core.dll</HintPath>
     </Reference>
-    <Reference Include="Woof.Debug, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\Woof.Debug.1.0.0\lib\netstandard2.0\Woof.Debug.dll</HintPath>
+    <Reference Include="Woof.Debug, Version=1.0.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>packages\Woof.Debug.1.0.1\lib\netstandard2.0\Woof.Debug.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>

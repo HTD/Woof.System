@@ -1,10 +1,12 @@
 ﻿using System;
+using System.Diagnostics;
 using System.DirectoryServices.AccountManagement;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.ServiceProcess; // add to references.
+using System.Text;
 using MbnApi; // add to references from: C:\Program Files (x86)\Windows Kits\10\Lib\{Build}\um\x86, requires Windows 10 SDK.
 using Microsoft.VisualBasic.Devices; // add to references.
 using Microsoft.Win32;
@@ -194,6 +196,71 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
             }
         }
 
+        /// <summary>
+        /// Gets the <see cref="SecurityIdentifier"/> for the user name in the system.
+        /// </summary>
+        /// <param name="userName">User name.</param>
+        /// <returns>SID or null if the user name does not exist in the system.</returns>
+        public static SecurityIdentifier GetSecurityIdentifier(string userName) {
+            var sddlForm = (string)Users.FirstOrDefault(u => ((string)u.Name).Equals(userName, StringComparison.OrdinalIgnoreCase))?.SID;
+            return sddlForm == null ? null : new SecurityIdentifier(sddlForm);
+        }
+
+
+        /// <summary>
+        /// Gets Microsoft Account identifier (login) for specified SID from the Registry.
+        /// </summary>
+        /// <param name="sid">Account SID.</param>
+        /// <returns>Microsoft Account Identifier or null if SID is not associated with a Microsoft Account.</returns>
+        public static string GetMicrosoftAccount(SecurityIdentifier sid) {
+            if (sid == null) return null;
+            using (var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, Environment.Is64BitOperatingSystem ? RegistryView.Registry64 : RegistryView.Registry32)) {
+                var path = $"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\Credential Providers\\{{D6886603-9D2F-4EB2-B667-1971041FA96B}}\\{sid.Value}\\UserNames";
+                using (var subKey = hklm.OpenSubKey(path)) {
+                    if (subKey == null) return null;
+                    return subKey.GetSubKeyNames().FirstOrDefault();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets Microsoft Account identifier (login) for specified user name from the Registry.
+        /// </summary>
+        /// <param name="userName">User name or null for the current user.</param>
+        /// <returns>Microsoft Account Identifier or null if user name is not associated with a Microsoft Account.</returns>
+        public static string GetMicrosoftAccount(string userName) => GetMicrosoftAccount(GetSecurityIdentifier(userName ?? Environment.UserName));
+
+        /// <summary>
+        /// Generates and retrieves user tile path for the specified user name.
+        /// </summary>
+        /// <param name="userName">User name or null for the current user.</param>
+        /// <returns>Path to the small 126x126 user account picture.</returns>
+        public static string GetUserPicturePath(string userName = null) {
+            if (userName == null) userName = Environment.UserName;
+            var msAccountName = GetMicrosoftAccount(userName);
+            var pathBuffer = new StringBuilder(1024);
+            NativeMethods.SHGetUserPicturePath(msAccountName ?? userName, NativeMethods.SHGetUserPictureFlags.CreatePicturesDir, pathBuffer, pathBuffer.Capacity);
+            return pathBuffer.ToString();
+        }
+
+        /// <summary>
+        /// Generates and retrieves user tile path for the specified user name.
+        /// </summary>
+        /// <param name="userName">User name or null for the current user.</param>
+        /// <param name="srcPath">Profile picture source path if available.</param>
+        /// <returns>Path to the small 126x126 user account picture.</returns>
+        public static string GetUserPicturePath(string userName, out string srcPath) {
+            var msAccountName = GetMicrosoftAccount(userName);
+            var pathBuffer = new StringBuilder(1024);
+            var srcBuffer = new StringBuilder(1024);
+            NativeMethods.SHGetUserPicturePathEx(msAccountName ?? userName, NativeMethods.SHGetUserPictureFlags.CreatePicturesDir, null, pathBuffer, pathBuffer.Capacity, srcBuffer, srcBuffer.Capacity);
+            srcPath = srcBuffer.ToString();
+            if (srcPath.StartsWith("\\\\")) { // converts machine-name format to standard windows path
+                srcPath = Environment.GetFolderPath(Environment.SpecialFolder.System).Substring(0, 2) + srcPath.Substring(srcPath.IndexOf('\\', 2));   
+            }
+            return pathBuffer.ToString();
+        }
+
         #region Cache
 
         // Cache is here for values which should not change during application session, and fetching the data from WMI or other queries is more expensive than some RAM.
@@ -308,7 +375,49 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
             [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
             internal static extern bool GetPhysicallyInstalledSystemMemory(out IntPtr totalMemoryInKilobytes);
 
+            /// <summary>
+            /// Copies the users account picture to a temporary directory and returns the path or returns various paths relating to user pictures.
+            /// </summary>
+            /// <param name="name">The name of a user account on this computer, or desired file name of the current users picture. Can be NULL to indicate the current users' name. Must be Microsoft Account Name for Microsoft Accounts.</param>
+            /// <param name="flags">Options, see <see cref="SHGetUserPictureFlags"/>.</param>
+            /// <param name="path">A pointer to a buffer that receives the path of the copied file. Cannot be NULL.</param>
+            /// <param name="pathLength">Length of the buffer in chars.</param>
+            [DllImport("shell32.dll", EntryPoint = "#261", CharSet = CharSet.Unicode, PreserveSig = false)]
+            internal static extern void SHGetUserPicturePath(string name, SHGetUserPictureFlags flags, StringBuilder path, int pathLength);
+
+            /// <summary>
+            /// Copies the users account picture to a temporary directory and returns the path or returns various paths relating to user pictures.
+            /// </summary>
+            /// <param name="name">The name of a user account on this computer, or desired file name of the current users picture. Can be NULL to indicate the current users' name. Must be Microsoft Account Name for Microsoft Accounts.</param>
+            /// <param name="flags">Options, see <see cref="SHGetUserPictureFlags"/>.</param>
+            /// <param name="desiredSrcExt">Desired filetype of the source picture. Defaults to .bmp if NULL is given.</param>
+            /// <param name="path">A pointer to a buffer that receives the path of the copied file. Cannot be NULL.</param>
+            /// <param name="pathLength">Length of the buffer in chars.</param>
+            /// <param name="srcPath">Buffer to which the original path of the users picture is copied.</param>
+            /// <param name="srcLength">Length of the source path buffer in chars.</param>
+            [DllImport("shell32.dll", EntryPoint = "#810", CharSet = CharSet.Unicode, PreserveSig = false)]
+            internal static extern void SHGetUserPicturePathEx(string name, SHGetUserPictureFlags flags, string desiredSrcExt, StringBuilder path, int pathLength, StringBuilder srcPath, int srcLength);
+
             #endregion
+
+            /// <summary>
+            /// Flags used by SHGetUserPicture and SHGetUserPictureEx shell32 calls.
+            /// </summary>
+            [Flags]
+            internal enum SHGetUserPictureFlags : uint {
+                /// <summary>
+                /// Make path contain only directory.
+                /// </summary>
+                Directory = 0x1,
+                /// <summary>
+                /// Make path contain only default pictures directory.
+                /// </summary>
+                DefaultDirectory = 0x2,
+                /// <summary>
+                /// Creates the (default) pictures directory if it doesn't exist.
+                /// </summary>
+                CreatePicturesDir = 0x80000000
+            }
 
         }
 
