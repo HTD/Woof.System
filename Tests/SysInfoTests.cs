@@ -1,6 +1,8 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
+using System.Dynamic;
 using System.IO;
+using System.Linq;
 
 namespace Woof.SystemEx.Tests {
 
@@ -8,7 +10,38 @@ namespace Woof.SystemEx.Tests {
     public class SysInfoTests {
 
         [TestMethod]
-        public void Sids() {
+        public void DeviceInfo() {
+            Console.WriteLine($"CPU:");
+            foreach (var p in SysInfo.Cpu) Console.WriteLine($" - {p.Key} = {p.Value}");
+            Console.WriteLine($"CpuId = {SysInfo.CpuId}");
+            Console.WriteLine($"CpuCores = {SysInfo.CpuCores}");
+            Console.WriteLine($"CpuCount = {SysInfo.CpuCount}");
+            Console.WriteLine($"CpuSpeed = {SysInfo.CpuSpeed}");
+            Console.WriteLine($"LogonUserFullName = {SysInfo.LogonUserFullName}");
+            Console.WriteLine($"LogonUserDomain = {SysInfo.LogonUserDomain}");
+            Console.WriteLine($"LogonUserName = {SysInfo.LogonUserName}");
+            Console.WriteLine($"IsLogonUserAdmin = {SysInfo.IsLogonUserAdmin}");
+            Console.WriteLine($"LogonUserSid = {SysInfo.LogonUserSid}");
+            Console.WriteLine($"UserSid = {SysInfo.UserSid}");
+            Console.WriteLine($"UserName = {SysInfo.UserName}");
+            Console.WriteLine($"DeviceId = {SysInfo.DeviceId}");
+            Console.WriteLine($"IMEI = {SysInfo.IMEI}");
+            Console.WriteLine($"LocalAppDataDir = {SysInfo.LocalAppDataDir}");
+            Console.WriteLine($"MemoryTotal = {SysInfo.MemoryTotal}");
+            Console.WriteLine("PhysicalMacs:");
+            foreach (var mac in SysInfo.PhysicalMacs) Console.WriteLine($" - {mac}");
+            Console.WriteLine($"ProfilesDirectory = {SysInfo.ProfilesDirectory}");
+            Console.WriteLine($"SystemDiskSerialNumber = {SysInfo.SystemDiskSerialNumber}");
+            Console.WriteLine($"SystemMemoryFree = {SysInfo.SystemMemoryFree}");
+            Console.WriteLine($"SystemMemoryTotal = {SysInfo.SystemMemoryTotal}");
+            Console.WriteLine("Users:");
+            foreach (var user in SysInfo.Users) Console.WriteLine($" - {user.SID} => {user.Name}");
+            Console.WriteLine($"WindowsProductId = {SysInfo.WindowsProductId}");
+            Console.WriteLine($"WindowsProductKey = {SysInfo.WindowsProductKey}");
+        }
+
+        [TestMethod]
+        public void SidsAndNames() {
             Console.WriteLine($"LogonUserSid = {SysInfo.LogonUserSid}");
             Console.WriteLine($"LogonUserName = {SysInfo.LogonUserName}");
             Console.WriteLine($"UserSid = {SysInfo.UserSid}");
@@ -16,7 +49,13 @@ namespace Woof.SystemEx.Tests {
         }
 
         [TestMethod]
-        public void GetUserPicturePaths() {
+        public void UserAttributes() {
+            ExpandoObject user = SysInfo.Users.First();
+            foreach (var p in user) Console.WriteLine($"{p.Key} = {p.Value}");
+        }
+
+        [TestMethod]
+        public void UserPicturePaths() {
             var currentUserSmall1 = SysInfo.GetUserPicturePath();
             var currentUserSmall2 = SysInfo.GetUserPicturePath(null, out var currentUserLarge);
             var unknownUserSmall1 = SysInfo.GetUserPicturePath("Unknown");

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
-using Woof.DebugEx;
 
 namespace Woof.SystemEx {
 
@@ -204,10 +203,7 @@ namespace Woof.SystemEx {
                         }
                         else {
                             if (state == LexemeType.Whitespace) {
-                                if (p > 0) {
-                                    yield return new Lexeme { Type = LexemeType.Whitespace, Value = Text.Substring(getOffset(), getLength()) };
-                                    p = i;
-                                }
+                                if (p > 0) yield return new Lexeme { Type = LexemeType.Whitespace, Value = Text.Substring(getOffset(), getLength()) };
                                 if (Text[i] == '#') {
                                     state = LexemeType.Comment;
                                     p = i;
@@ -230,7 +226,7 @@ namespace Woof.SystemEx {
 
                 public LexemeType Type;
                 public string Value;
-                public override string ToString() => $"[{Type}] = \"{Value.WhitespaceVisible()}\"";
+                public override string ToString() => $"[{Type}] = \"{Value.Replace('\r', '←').Replace('\n', '↓').Replace(' ', '·').Replace('\t', '→')}\"";
 
             }
 

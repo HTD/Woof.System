@@ -1,5 +1,7 @@
-﻿using System;
-using System.Diagnostics;
+﻿using MbnApi; // add to references from: C:\Program Files (x86)\Windows Kits\10\Lib\{Build}\um\x86, requires Windows 10 SDK.
+using Microsoft.VisualBasic.Devices; // add to references.
+using Microsoft.Win32;
+using System;
 using System.DirectoryServices.AccountManagement;
 using System.IO;
 using System.Linq;
@@ -7,9 +9,6 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.ServiceProcess; // add to references.
 using System.Text;
-using MbnApi; // add to references from: C:\Program Files (x86)\Windows Kits\10\Lib\{Build}\um\x86, requires Windows 10 SDK.
-using Microsoft.VisualBasic.Devices; // add to references.
-using Microsoft.Win32;
 
 namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identification.DGuid, MbnApi.
 
@@ -108,8 +107,7 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         public static double MemoryTotal {
             get {
                 if (_MemoryTotal > 0) return _MemoryTotal;
-                var p = new IntPtr(0L);
-                NativeMethods.GetPhysicallyInstalledSystemMemory(out p);
+                NativeMethods.GetPhysicallyInstalledSystemMemory(out var p);
                 return _MemoryTotal = (uint)p / (double)0x10_0000L;
             }
         }
@@ -161,10 +159,11 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         public static string WindowsProductId {
             get {
                 if (_WindowsProductId != null) return _WindowsProductId;
-                var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
-                var key = hklm.OpenSubKey(@"Software\Microsoft\Windows NT\CurrentVersion");
-                var value = key.GetValue("ProductId");
-                return value != null ? _WindowsProductId = value.ToString() : NotAvailable;
+                using (var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
+                using (var key = hklm.OpenSubKey(@"Software\Microsoft\Windows NT\CurrentVersion")) {
+                    var value = key.GetValue("ProductId");
+                    return value != null ? _WindowsProductId = value.ToString() : NotAvailable;
+                }
             }
         }
 
@@ -319,10 +318,10 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
             for (var i = 24; i >= 0; i--) {
                 var current = 0;
                 for (var j = 14; j >= 0; j--) {
-                    current = current * 256;
+                    current *= 256;
                     current = digitalProductId[j + keyOffset] + current;
                     digitalProductId[j + keyOffset] = (byte)(current / 24);
-                    current = current % 24;
+                    current %= 24;
                     last = current;
                 }
                 key = ProductKeyMap[current] + key;
