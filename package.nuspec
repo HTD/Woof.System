@@ -2,17 +2,17 @@
 <package>
   <metadata>
     <id>Woof.System</id>
-    <version>1.0.5</version>
+    <version>2.0.0</version>
     <title>Woof.System</title>
     <authors>Adam Łyskawa</authors>
-    <owners>CodeDog Ltd.</owners>
+    <owners>CodeDog Ltd</owners>
     <licenseUrl>https://en.wikipedia.org/wiki/MIT_License</licenseUrl>
     <projectUrl>https://github.com/HTD/Woof.System</projectUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <description>Advanced Windows system information tools.</description>
-    <releaseNotes>REMOVE: GetUserTilePath(string userName)
-ADD: GetUserPicturePath(string userName = null)
-ADD: GetUserPicturePath(string userName, out string srcPath)</releaseNotes>
+    <description>Advanced Windows system information tools.
+It knows your IMEI and Windows Product Key even if you dont ;)</description>
+    <releaseNotes>Major dependency cleanup.
+Full SysInfo test.</releaseNotes>
     <copyright>(c)2018 by CodeDog Ltd.</copyright>
     <tags>code codedog dotnet system</tags>
   </metadata>

@@ -2,6 +2,9 @@
 using Microsoft.VisualBasic.Devices; // add to references.
 using Microsoft.Win32;
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.DirectoryServices.AccountManagement;
 using System.IO;
 using System.Linq;
@@ -9,6 +12,9 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.ServiceProcess; // add to references.
 using System.Text;
+using System.Threading;
+using Woof.SystemEx.Win32Types;
+using Woof.SystemEx.Win32Imports;
 
 namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identification.DGuid, MbnApi.
 
@@ -43,48 +49,10 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         public static int CpuSpeed => _CpuSpeed ?? (_CpuSpeed = (int)WMI.Query("SELECT MaxClockSpeed FROM Win32_Processor").First().MaxClockSpeed).Value;
 
         /// <summary>
-        /// Gets the full user name (with domain) of the user that is currently logged on.
+        /// Gets IMEI (International Mobile Equipment Identity) for mobile devices, null for dekstops.
         /// </summary>
-        /// <remarks>
-        /// Returns null when no user is logged on.
-        /// </remarks>
-        public static string LogonUserFullName => WMI.Query("SELECT UserName FROM Win32_ComputerSystem").FirstOrDefault()?.UserName;
+        public static string IMEI => _IMEI ?? (_IMEI = GetIMEI());
 
-        /// <summary>
-        /// Gets the domain name of the user that is currently logged on.
-        /// </summary>
-        /// <remarks>
-        /// Returns null when no user is logged on.
-        /// </remarks>
-        public static string LogonUserDomain => LogonUserFullName.Split('\\').FirstOrDefault();
-
-        /// <summary>
-        /// Gets the (short) name of the user that is currently logged on.
-        /// </summary>
-        /// <remarks>
-        /// Returns null when no user is logged on.
-        /// </remarks>
-        public static string LogonUserName => LogonUserFullName.Split('\\').Skip(1).FirstOrDefault();
-
-        /// <summary>
-        /// Gets a value indicating that a user currently logged on is in Administrators group.
-        /// </summary>
-        public static bool IsLogonUserAdmin => Users.FirstOrDefault(i => i.SID == LogonUserSid.Value).IsAdmin;
-
-        /// <summary>
-        /// Gets the security identifier of the user that is currently logged on.
-        /// </summary>
-        public static SecurityIdentifier LogonUserSid => new SecurityIdentifier(Users.FirstOrDefault(i => i.Name == LogonUserName).SID);
-
-        /// <summary>
-        /// Gets the current (normal, system, elevated) user SID.
-        /// </summary>
-        public static SecurityIdentifier UserSid => WindowsIdentity.GetCurrent().User;
-
-        /// <summary>
-        /// Gets the current (normal, system, elevated) user Name.
-        /// </summary>
-        public static string UserName => WindowsIdentity.GetCurrent().Name.Split('\\').Skip(1).FirstOrDefault();
 
         /// <summary>
         /// Gets unique device identifier based on mobile broadband network interface IMEI, system disk serial number or concatenation of physical networ adapters MAC addresses.
@@ -92,14 +60,66 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         public static Guid DeviceId => _DeviceId ?? (_DeviceId = new DGuid(IMEI ?? SystemDiskSerialNumber ?? String.Join(" ", PhysicalMacs)));
 
         /// <summary>
-        /// Gets IMEI (International Mobile Equipment Identity) for mobile devices, null for dekstops.
+        /// Gets the current process user.
         /// </summary>
-        public static string IMEI => _IMEI ?? (_IMEI = GetIMEI());
+        public static LocalAccount CurrentProcessUser {
+            get {
+                 using (var currentUserIdentity = WindowsIdentity.GetCurrent()) return new LocalAccount(currentUserIdentity.User);
+            }
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether the current process user has actual administrative privileges.
+        /// </summary>
+        public static bool IsCurrentProcessUserAdmin {
+            get {
+                using (var currentUserIdentity = WindowsIdentity.GetCurrent())
+                    return currentUserIdentity.Owner.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid);
+            }
+        }
+
+        /// <summary>
+        /// Gets the user account who actually owns the active UI session.
+        /// </summary>
+        public static LocalAccount LogonUser {
+            get {
+                using (var currentIdentity = WindowsIdentity.GetCurrent()) {
+                    if (currentIdentity.IsSystem) {
+                        IntPtr userToken = IntPtr.Zero;
+                        try {
+                            userToken = GetSessionUserToken();
+                            if (userToken != IntPtr.Zero)
+                                using (var userIdentity = new WindowsIdentity(userToken))
+                                    return new LocalAccount(userIdentity.User);
+                            else return new LocalAccount(currentIdentity.User);
+                        }
+                        catch {
+                            return new LocalAccount(currentIdentity.User);
+                        }
+                        finally {
+                            if (userToken != IntPtr.Zero) NativeMethods.CloseHandle(userToken);
+                        }
+                    }
+                    else return new LocalAccount(currentIdentity.User);
+                }
+            }
+
+        }
+
+        /// <summary>
+        /// Gets the local groups.
+        /// </summary>
+        public static LocalGroup[] LocalGroups => GetLocalGroups();
 
         /// <summary>
         /// Gets local AppData directory for current user, WORKS FROM SYSTEM ACCOUNT!
         /// </summary>
-        public static string LocalAppDataDir => Path.Combine(ProfilesDirectory, LogonUserName, "AppData", "Local");
+        public static string LocalAppDataDirectory => Path.Combine(ProfilesDirectory, LogonUser.Name, "AppData", "Local");
+
+        /// <summary>
+        /// Gets user profiles directory from Windows registry.
+        /// </summary>
+        public static string ProfilesDirectory => _ProfilesDirectory ?? (_ProfilesDirectory = (string)Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList", "ProfilesDirectory", ""));
 
         /// <summary>
         /// Gets total installed RAM amount in GB.
@@ -116,11 +136,6 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// Gets physical network interfaces MAC addresses (hex values delimited by ':').
         /// </summary>
         public static string[] PhysicalMacs => WMI.Query("SELECT MACAddress FROM Win32_NetworkAdapterConfiguration WHERE MACAddress IS NOT NULL AND NOT Description LIKE \"%Virtual%\"").Select(i => (string)i.MACAddress).ToArray();
-
-        /// <summary>
-        /// Gets user profiles directory from Windows registry.
-        /// </summary>
-        public static string ProfilesDirectory => _ProfilesDirectory ?? (_ProfilesDirectory = (string)Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList", "ProfilesDirectory", ""));
 
         /// <summary>
         /// Gets system disk serial number, should be unique for unique devices.
@@ -144,12 +159,18 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         }
 
         /// <summary>
-        /// Gets all user accounts enabled in the system.
+        /// Gets all normal, enabled user accounts on the local computer.
         /// </summary>
-        public static dynamic[] Users => WMI.Query("SELECT * FROM Win32_UserAccount WHERE Disabled = 0").Select<dynamic, dynamic>(d => {
+        public static LocalAccount[] Users => GetLocalAccounts();
+
+        /// <summary>
+        /// Gets all normal, enabled user accounts on the local computer, with extended information from WMI.
+        /// </summary>
+        public static dynamic[] UsersWMI => WMI.Query("SELECT * FROM Win32_UserAccount WHERE Disabled = 0 AND NOT Name LIKE '%$'")
+            .Select<dynamic, dynamic>(d => {
             using (var machineContext = new PrincipalContext(ContextType.Machine))
             using (Principal principal = Principal.FindByIdentity(machineContext, d.SID))
-                d.IsAdmin = principal.GetGroups().Any(i => i.Sid.IsWellKnown(System.Security.Principal.WellKnownSidType.BuiltinAdministratorsSid));
+                d.IsAdmin = principal.GetGroups().Any(i => i.Sid.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid));
             return d;
         }).ToArray();
 
@@ -196,15 +217,65 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         }
 
         /// <summary>
+        /// Gets the account of the process owner.
+        /// </summary>
+        /// <param name="process">Process.</param>
+        /// <returns>Account information.</returns>
+        public static LocalAccount GetProcessUser(Process process) {
+            IntPtr processHandle = IntPtr.Zero;
+            try {
+                
+                NativeMethods.OpenProcessToken(process.Handle, TokenAccessLevels.Query, out processHandle);
+                using (var identity = new WindowsIdentity(processHandle)) return new LocalAccount(identity.User);
+            }
+            finally {
+                if (processHandle != IntPtr.Zero) NativeMethods.CloseHandle(processHandle);
+            }
+        }
+
+        /// <summary>
+        /// Gets a value indicating whether the process is elevated.
+        /// </summary>
+        /// <param name="process">Process.</param>
+        /// <returns>True if elevated.</returns>
+        public static bool GetProcessElevated(Process process) {
+            IntPtr processHandle = IntPtr.Zero;
+            try {
+
+                NativeMethods.OpenProcessToken(process.Handle, TokenAccessLevels.Query, out processHandle);
+                var elevationResult = TokenElevationType.Default;
+                var elevationResultSize = Marshal.SizeOf((int)elevationResult);
+                var elevationTypePtr = Marshal.AllocHGlobal(elevationResultSize);
+                try {
+                    var success = NativeMethods.GetTokenInformation(processHandle, TokenInformationClass.TokenElevationType, elevationTypePtr, (uint)elevationResultSize, out var returnedSize);
+                    if (success) {
+                        elevationResult = (TokenElevationType)Marshal.ReadInt32(elevationTypePtr);
+                        return elevationResult == TokenElevationType.Full;
+                    }
+                    return false;
+                }
+                finally {
+                    if (elevationTypePtr != IntPtr.Zero) Marshal.FreeHGlobal(elevationTypePtr);
+                }
+            }
+            finally {
+                if (processHandle != IntPtr.Zero) NativeMethods.CloseHandle(processHandle);
+            }
+        }
+
+        /// <summary>
         /// Gets the <see cref="SecurityIdentifier"/> for the user name in the system.
         /// </summary>
         /// <param name="userName">User name.</param>
         /// <returns>SID or null if the user name does not exist in the system.</returns>
         public static SecurityIdentifier GetSecurityIdentifier(string userName) {
-            var sddlForm = (string)Users.FirstOrDefault(u => ((string)u.Name).Equals(userName, StringComparison.OrdinalIgnoreCase))?.SID;
-            return sddlForm == null ? null : new SecurityIdentifier(sddlForm);
+            try {
+                return new NTAccount(userName).Translate(typeof(SecurityIdentifier)) as SecurityIdentifier;
+            }
+            catch (IdentityNotMappedException) {
+                return null;
+            }
         }
-
 
         /// <summary>
         /// Gets Microsoft Account identifier (login) for specified SID from the Registry.
@@ -238,7 +309,7 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
             if (userName == null) userName = Environment.UserName;
             var msAccountName = GetMicrosoftAccount(userName);
             var pathBuffer = new StringBuilder(1024);
-            NativeMethods.SHGetUserPicturePath(msAccountName ?? userName, NativeMethods.SHGetUserPictureFlags.CreatePicturesDir, pathBuffer, pathBuffer.Capacity);
+            NativeMethods.SHGetUserPicturePath(msAccountName ?? userName, GetUserPictureFlags.CreatePicturesDir, pathBuffer, pathBuffer.Capacity);
             return pathBuffer.ToString();
         }
 
@@ -252,41 +323,27 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
             var msAccountName = GetMicrosoftAccount(userName);
             var pathBuffer = new StringBuilder(1024);
             var srcBuffer = new StringBuilder(1024);
-            NativeMethods.SHGetUserPicturePathEx(msAccountName ?? userName, NativeMethods.SHGetUserPictureFlags.CreatePicturesDir, null, pathBuffer, pathBuffer.Capacity, srcBuffer, srcBuffer.Capacity);
+            NativeMethods.SHGetUserPicturePathEx(msAccountName ?? userName, GetUserPictureFlags.CreatePicturesDir, null, pathBuffer, pathBuffer.Capacity, srcBuffer, srcBuffer.Capacity);
             srcPath = srcBuffer.ToString();
             if (srcPath.StartsWith("\\\\")) { // converts machine-name format to standard windows path
-                srcPath = Environment.GetFolderPath(Environment.SpecialFolder.System).Substring(0, 2) + srcPath.Substring(srcPath.IndexOf('\\', 2));   
+                srcPath = Environment.GetFolderPath(Environment.SpecialFolder.System).Substring(0, 2) + srcPath.Substring(srcPath.IndexOf('\\', 2));
             }
             return pathBuffer.ToString();
         }
 
-        #region Cache
 
-        // Cache is here for values which should not change during application session, and fetching the data from WMI or other queries is more expensive than some RAM.
+        #region Helpers
 
-        const string NotAvailable = "N/A";
-        static string _IMEI;
-        static string _SystemDiskSerialNumber;
-        static ComputerInfo _ComputerInfo;
-        static int? _CpuCount;
-        static int? _CpuCores;
-        static int? _CpuSpeed;
-        static DGuid _DeviceId;
-        static double _MemoryTotal;
-        static string _ProfilesDirectory;
-        static double _SystemMemoryTotal;
-        static byte[] _WindowsDigitalProductId;
-        static string _WindowsProductId;
-        static string _WindowsProductKey;
-
-        #endregion
-
-        #region Toolkit
+        #region Visual Basic
 
         /// <summary>
         /// Gets cached <see cref="Microsoft.VisualBasic.Devices.ComputerInfo"/> instance.
         /// </summary>
         private static ComputerInfo ComputerInfo => _ComputerInfo ?? (_ComputerInfo = new ComputerInfo());
+
+        #endregion
+
+        #region MBN API
 
         /// <summary>
         /// Returns IMEI of main mobile broadband network interface.
@@ -303,6 +360,10 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
             }
             catch (COMException) { return null; } // no surprises.
         }
+
+        #endregion
+
+        #region Product key
 
         /// <summary>
         /// Decodes Windows 8 and 10 product key.
@@ -359,69 +420,160 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// </summary>
         private const string ProductKeyMap = "BCDFGHJKMPQRTVWXY2346789";
 
+        #endregion
+
+        #region Net API
+
         /// <summary>
-        /// Win32 calls.
+        /// Reads data from the Net API.
         /// </summary>
-        static class NativeMethods {
-
-            #region DLL imports
-
-            /// <summary>
-            /// Retrieves the amount of RAM that is physically installed on the computer.
-            /// </summary>
-            /// <param name="totalMemoryInKilobytes">A pointer to a variable that receives the amount of physically installed RAM, in kilobytes.</param>
-            /// <returns>If the function succeeds, it returns TRUE and sets the TotalMemoryInKilobytes parameter to a nonzero value.</returns>
-            [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-            internal static extern bool GetPhysicallyInstalledSystemMemory(out IntPtr totalMemoryInKilobytes);
-
-            /// <summary>
-            /// Copies the users account picture to a temporary directory and returns the path or returns various paths relating to user pictures.
-            /// </summary>
-            /// <param name="name">The name of a user account on this computer, or desired file name of the current users picture. Can be NULL to indicate the current users' name. Must be Microsoft Account Name for Microsoft Accounts.</param>
-            /// <param name="flags">Options, see <see cref="SHGetUserPictureFlags"/>.</param>
-            /// <param name="path">A pointer to a buffer that receives the path of the copied file. Cannot be NULL.</param>
-            /// <param name="pathLength">Length of the buffer in chars.</param>
-            [DllImport("shell32.dll", EntryPoint = "#261", CharSet = CharSet.Unicode, PreserveSig = false)]
-            internal static extern void SHGetUserPicturePath(string name, SHGetUserPictureFlags flags, StringBuilder path, int pathLength);
-
-            /// <summary>
-            /// Copies the users account picture to a temporary directory and returns the path or returns various paths relating to user pictures.
-            /// </summary>
-            /// <param name="name">The name of a user account on this computer, or desired file name of the current users picture. Can be NULL to indicate the current users' name. Must be Microsoft Account Name for Microsoft Accounts.</param>
-            /// <param name="flags">Options, see <see cref="SHGetUserPictureFlags"/>.</param>
-            /// <param name="desiredSrcExt">Desired filetype of the source picture. Defaults to .bmp if NULL is given.</param>
-            /// <param name="path">A pointer to a buffer that receives the path of the copied file. Cannot be NULL.</param>
-            /// <param name="pathLength">Length of the buffer in chars.</param>
-            /// <param name="srcPath">Buffer to which the original path of the users picture is copied.</param>
-            /// <param name="srcLength">Length of the source path buffer in chars.</param>
-            [DllImport("shell32.dll", EntryPoint = "#810", CharSet = CharSet.Unicode, PreserveSig = false)]
-            internal static extern void SHGetUserPicturePathEx(string name, SHGetUserPictureFlags flags, string desiredSrcExt, StringBuilder path, int pathLength, StringBuilder srcPath, int srcLength);
-
-            #endregion
-
-            /// <summary>
-            /// Flags used by SHGetUserPicture and SHGetUserPictureEx shell32 calls.
-            /// </summary>
-            [Flags]
-            internal enum SHGetUserPictureFlags : uint {
-                /// <summary>
-                /// Make path contain only directory.
-                /// </summary>
-                Directory = 0x1,
-                /// <summary>
-                /// Make path contain only default pictures directory.
-                /// </summary>
-                DefaultDirectory = 0x2,
-                /// <summary>
-                /// Creates the (default) pictures directory if it doesn't exist.
-                /// </summary>
-                CreatePicturesDir = 0x80000000
+        /// <typeparam name="T">Type of the structure to read.</typeparam>
+        /// <param name="status">One of <see cref="NetApiStatus"/> enumeration.</param>
+        /// <param name="buffer">Pointer to the buffer returned by Net API.</param>
+        /// <param name="read">The number of elements read by Net API.</param>
+        /// <returns><see cref="IEnumerable{T}"/></returns>
+        internal static IEnumerable<T> ReadNetApi<T>(NetApiStatus status, IntPtr buffer, int read) where T : struct {
+            if (status != NetApiStatus.Success) {
+                if (status == NetApiStatus.AccessDenied) throw new UnauthorizedAccessException();
+                else throw new InvalidOperationException($"NetApi {status}");
             }
+            var location = buffer;
+            for (int i = 0; i < read; i++) {
+                yield return (T)Marshal.PtrToStructure(location, typeof(T));
+                location += Marshal.SizeOf<T>();
+            }
+
 
         }
 
-    }
+        internal static LocalAccount[] GetLocalAccounts() {
+            var buffer = IntPtr.Zero;
+            try {
+                var status = NativeMethods.NetUserEnum(null, 20, NetApiFilter.NormalAccount, ref buffer, -1, out var read, out var total, IntPtr.Zero);
+                return ReadNetApi<UserInfo>(status, buffer, read)
+                    .Where(i => i.Flags.HasFlag(UserFlags.NormalAccount) && !i.Flags.HasFlag(UserFlags.AccountDisable) && !i.Name.EndsWith("$"))
+                    .Select(i => new LocalAccount(i)).ToArray();
+            }
+            finally {
+                if (buffer != IntPtr.Zero) NativeMethods.NetApiBufferFree(buffer);
+            }
+        }
 
-    #endregion
+        /// <summary>
+        /// Gets the local accounts within a group.
+        /// </summary>
+        /// <param name="localizedGroupName">Localized group name.</param>
+        /// <returns>Local accounts.</returns>
+        internal static LocalAccount[] GetLocalAccounts(string localizedGroupName) {
+            var buffer = IntPtr.Zero;
+            try {
+                var status = NativeMethods.NetLocalGroupGetMembers(null, localizedGroupName, 2, ref buffer, -1, out var read, out var total, IntPtr.Zero);
+                return ReadNetApi<LocalGroupMember>(status, buffer, read)
+                    .Where(i => i.SidUsage.HasFlag(SidNameUse.User))
+                    .Select(i => new LocalAccount(i)).ToArray();
+            }
+            finally {
+                if (buffer != IntPtr.Zero) NativeMethods.NetApiBufferFree(buffer);
+            }
+        }
+
+        /// <summary>
+        /// Gets the local groups of the local computer.
+        /// </summary>
+        /// <returns>Local groups.</returns>
+        internal static LocalGroup[] GetLocalGroups() {
+            var buffer = IntPtr.Zero;
+            try {
+                var status = NativeMethods.NetLocalGroupEnum(null, 1, ref buffer, -1, out var read, out var total, IntPtr.Zero);
+                return ReadNetApi<LocalGroupInfo>(status, buffer, read).Select(i => new LocalGroup(i)).ToArray();
+            }
+            finally {
+                if (buffer != IntPtr.Zero) NativeMethods.NetApiBufferFree(buffer);
+            }
+        }
+
+        internal static LocalAccount[] GetLocalGroupMembers(SecurityIdentifier sid) {
+            var account = sid.Translate(typeof(NTAccount)) as NTAccount;
+            var localizedWithDomain = account.Value;
+            var localized = localizedWithDomain.Split('\\').Last();
+            return GetLocalAccounts(localized);
+        }
+
+        internal static LocalAccount[] GetLocalGroupMembers(WellKnownSidType sidType)
+            => GetLocalGroupMembers(new SecurityIdentifier(sidType, null));
+
+
+        #endregion
+
+        #region WTS API
+
+        const uint WtsApiInvalidSessionId = 0xFFFFFFFF;
+
+        /// <summary>
+        /// Gets the user impersonation token from the currently active session.
+        /// Do not invoke as regular user, the proper usage is from system account.
+        /// </summary>
+        /// <returns>Impersonation token for the active session owner.</returns>
+        private static IntPtr GetSessionUserToken() {
+            var wtsCurrentServerHandle = IntPtr.Zero;
+            var bResult = false;
+            var hImpersonationToken = IntPtr.Zero;
+            var activeSessionId = WtsApiInvalidSessionId;
+            var pSessionInfo = IntPtr.Zero;
+            var sessionCount = 0;
+            var sessionUserToken = IntPtr.Zero;
+            // Get a handle to the user access token for the current active session.
+            if (NativeMethods.WTSEnumerateSessions(wtsCurrentServerHandle, 0, 1, ref pSessionInfo, ref sessionCount) != 0) {
+                var arrayElementSize = Marshal.SizeOf(typeof(WtsSessionInfo));
+                var current = (long)pSessionInfo;
+                for (var i = 0; i < sessionCount; i++) {
+                    var si = (WtsSessionInfo)Marshal.PtrToStructure((IntPtr)current, typeof(WtsSessionInfo));
+                    current += (long)arrayElementSize;
+                    if (si.State == WtsConnectState.Active) activeSessionId = si.SessionID;
+                }
+            }
+            // If enumerating did not work, fall back to the old method
+            if (activeSessionId == WtsApiInvalidSessionId) activeSessionId = NativeMethods.WTSGetActiveConsoleSessionId();
+            if (NativeMethods.WTSQueryUserToken(activeSessionId, ref hImpersonationToken) != 0) {
+                // Convert the impersonation token to a primary token
+                bResult = NativeMethods.DuplicateTokenEx(
+                    hImpersonationToken,
+                    0,
+                    IntPtr.Zero,
+                    (int)SecurityImpersonationLevel.SecurityImpersonation,
+                    (int)TokenType.TokenPrimary,
+                    ref sessionUserToken);
+
+                NativeMethods.CloseHandle(hImpersonationToken);
+            }
+            return bResult ? sessionUserToken : IntPtr.Zero;
+        }
+
+        #endregion
+
+        #endregion
+
+        #region Cache
+
+        // Cache is here for values which should not change during application session, and fetching the data from WMI or other queries is more expensive than some RAM.
+
+        const string NotAvailable = "N/A";
+        static string _IMEI;
+        static string _SystemDiskSerialNumber;
+        static ComputerInfo _ComputerInfo;
+        static int? _CpuCount;
+        static int? _CpuCores;
+        static int? _CpuSpeed;
+        static DGuid _DeviceId;
+        static double _MemoryTotal;
+        static string _ProfilesDirectory;
+        static double _SystemMemoryTotal;
+        static byte[] _WindowsDigitalProductId;
+        static string _WindowsProductId;
+        static string _WindowsProductKey;
+
+        #endregion
+
+    }
 
 }
