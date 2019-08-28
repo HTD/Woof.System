@@ -64,7 +64,9 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// </summary>
         public static LocalAccount CurrentProcessUser {
             get {
-                 using (var currentUserIdentity = WindowsIdentity.GetCurrent()) return new LocalAccount(currentUserIdentity.User);
+                if (!(_CurrentProcessUser is null)) return _CurrentProcessUser;
+                 using (var currentUserIdentity = WindowsIdentity.GetCurrent())
+                    return _CurrentProcessUser = new LocalAccount(currentUserIdentity.User);
             }
         }
 
@@ -83,24 +85,25 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// </summary>
         public static LocalAccount LogonUser {
             get {
-                using (var currentIdentity = WindowsIdentity.GetCurrent()) {
-                    if (currentIdentity.IsSystem) {
+                if (!(_LogonUser is null)) return _LogonUser;
+                using (var currentUserIdentity = WindowsIdentity.GetCurrent()) {
+                    if (currentUserIdentity.IsSystem) {
                         IntPtr userToken = IntPtr.Zero;
                         try {
                             userToken = GetSessionUserToken();
                             if (userToken != IntPtr.Zero)
-                                using (var userIdentity = new WindowsIdentity(userToken))
-                                    return new LocalAccount(userIdentity.User);
-                            else return new LocalAccount(currentIdentity.User);
+                                using (var tokenUserIdentity = new WindowsIdentity(userToken))
+                                    return _LogonUser = new LocalAccount(tokenUserIdentity.User);
+                            else return _LogonUser = new LocalAccount(currentUserIdentity.User);
                         }
                         catch {
-                            return new LocalAccount(currentIdentity.User);
+                            return _LogonUser = new LocalAccount(currentUserIdentity.User);
                         }
                         finally {
                             if (userToken != IntPtr.Zero) NativeMethods.CloseHandle(userToken);
                         }
                     }
-                    else return new LocalAccount(currentIdentity.User);
+                    else return _LogonUser = new LocalAccount(currentUserIdentity.User);
                 }
             }
 
@@ -114,12 +117,14 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// <summary>
         /// Gets local AppData directory for current user, WORKS FROM SYSTEM ACCOUNT!
         /// </summary>
-        public static string LocalAppDataDirectory => Path.Combine(ProfilesDirectory, LogonUser.Name, "AppData", "Local");
+        public static string LocalAppDataDirectory
+            => _LocalAppDataDirectory ?? (_LocalAppDataDirectory = Path.Combine(ProfilesDirectory, LogonUser.Name, "AppData", "Local"));
 
         /// <summary>
         /// Gets user profiles directory from Windows registry.
         /// </summary>
-        public static string ProfilesDirectory => _ProfilesDirectory ?? (_ProfilesDirectory = (string)Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList", "ProfilesDirectory", ""));
+        public static string ProfilesDirectory
+            => _ProfilesDirectory ?? (_ProfilesDirectory = (string)Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\ProfileList", "ProfilesDirectory", ""));
 
         /// <summary>
         /// Gets total installed RAM amount in GB.
@@ -566,7 +571,10 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         static int? _CpuSpeed;
         static DGuid _DeviceId;
         static double _MemoryTotal;
+        static LocalAccount _LogonUser;
+        static LocalAccount _CurrentProcessUser;
         static string _ProfilesDirectory;
+        static string _LocalAppDataDirectory;
         static double _SystemMemoryTotal;
         static byte[] _WindowsDigitalProductId;
         static string _WindowsProductId;
