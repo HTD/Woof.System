@@ -95,6 +95,12 @@ namespace Woof.SystemEx {
         }
 
         /// <summary>
+        /// Returns string representation of the local account.
+        /// </summary>
+        /// <returns>String representation.</returns>
+        public override string ToString() => $"{FullName} {{{Sid.Value}}}";
+
+        /// <summary>
         /// Equality test depending on SID only.
         /// </summary>
         /// <param name="obj">The other object.</param>

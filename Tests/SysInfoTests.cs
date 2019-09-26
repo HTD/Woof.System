@@ -1,4 +1,5 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.Win32;
 using System;
 using System.Diagnostics;
 using System.Dynamic;
@@ -99,6 +100,18 @@ namespace Woof.SystemEx.Tests {
             }
             else Console.WriteLine("Access denied. Try again with the process elevated.");
         }
+
+        [TestMethod]
+        public void A06_OsVersion() {
+            Console.WriteLine($"Environment.OsVersion = {Environment.OSVersion.Version}");
+            Console.WriteLine($"RegistryVersion = {Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion", "ProductName", "").ToString()}");
+            
+            //var os = SysInfo.OperatingSystem;
+            //foreach (var i in os) {
+            //    Console.WriteLine($"{i.Key} = {i.Value}");
+            //}
+        }
+
 
     }
 

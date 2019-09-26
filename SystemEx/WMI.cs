@@ -8,7 +8,7 @@ namespace Woof.SystemEx {
     /// <summary>
     /// Safe, managed WMI queries support.
     /// </summary>
-    static class WMI {
+    public static class WMI {
 
         /// <summary>
         /// Queries WMI and returns results as an array of dynamic objects.

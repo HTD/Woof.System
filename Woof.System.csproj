@@ -9,7 +9,7 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Woof</RootNamespace>
     <AssemblyName>Woof.System</AssemblyName>
-    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.6.1</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <TargetFrameworkProfile />
   </PropertyGroup>
@@ -34,13 +34,12 @@
   <ItemGroup>
     <Reference Include="Microsoft.VisualBasic" />
     <Reference Include="System" />
-    <Reference Include="System.DirectoryServices.AccountManagement" />
     <Reference Include="System.Management" />
     <Reference Include="System.Security" />
-    <Reference Include="System.ServiceProcess" />
     <Reference Include="Microsoft.CSharp" />
-    <Reference Include="Woof.Core, Version=2.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>packages\Woof.Core.2.0.0\lib\netstandard2.0\Woof.Core.dll</HintPath>
+    <Reference Include="System.ServiceProcess" />
+    <Reference Include="Woof.Core, Version=2.2.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>packages\Woof.Core.2.2.0\lib\netstandard2.0\Woof.Core.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
@@ -65,8 +64,8 @@
     <Compile Include="SystemEx\WMI.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
     <None Include="package.nuspec" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <COMReference Include="MbnApi">

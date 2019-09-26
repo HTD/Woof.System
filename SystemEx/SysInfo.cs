@@ -5,7 +5,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.DirectoryServices.AccountManagement;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -64,9 +63,8 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// </summary>
         public static LocalAccount CurrentProcessUser {
             get {
-                if (!(_CurrentProcessUser is null)) return _CurrentProcessUser;
-                 using (var currentUserIdentity = WindowsIdentity.GetCurrent())
-                    return _CurrentProcessUser = new LocalAccount(currentUserIdentity.User);
+                using (var currentUserIdentity = WindowsIdentity.GetCurrent())
+                    return new LocalAccount(currentUserIdentity.User);
             }
         }
 
@@ -85,7 +83,6 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// </summary>
         public static LocalAccount LogonUser {
             get {
-                if (!(_LogonUser is null)) return _LogonUser;
                 using (var currentUserIdentity = WindowsIdentity.GetCurrent()) {
                     if (currentUserIdentity.IsSystem) {
                         IntPtr userToken = IntPtr.Zero;
@@ -93,17 +90,17 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
                             userToken = GetSessionUserToken();
                             if (userToken != IntPtr.Zero)
                                 using (var tokenUserIdentity = new WindowsIdentity(userToken))
-                                    return _LogonUser = new LocalAccount(tokenUserIdentity.User);
-                            else return _LogonUser = new LocalAccount(currentUserIdentity.User);
+                                    return new LocalAccount(tokenUserIdentity.User);
+                            else return new LocalAccount(currentUserIdentity.User);
                         }
                         catch {
-                            return _LogonUser = new LocalAccount(currentUserIdentity.User);
+                            return new LocalAccount(currentUserIdentity.User);
                         }
                         finally {
                             if (userToken != IntPtr.Zero) NativeMethods.CloseHandle(userToken);
                         }
                     }
-                    else return _LogonUser = new LocalAccount(currentUserIdentity.User);
+                    else return new LocalAccount(currentUserIdentity.User);
                 }
             }
 
@@ -169,15 +166,10 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         public static LocalAccount[] Users => GetLocalAccounts();
 
         /// <summary>
-        /// Gets all normal, enabled user accounts on the local computer, with extended information from WMI.
+        /// Gets the operating system extended information from WMI.
         /// </summary>
-        public static dynamic[] UsersWMI => WMI.Query("SELECT * FROM Win32_UserAccount WHERE Disabled = 0 AND NOT Name LIKE '%$'")
-            .Select<dynamic, dynamic>(d => {
-            using (var machineContext = new PrincipalContext(ContextType.Machine))
-            using (Principal principal = Principal.FindByIdentity(machineContext, d.SID))
-                d.IsAdmin = principal.GetGroups().Any(i => i.Sid.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid));
-            return d;
-        }).ToArray();
+        public static dynamic OperatingSystem
+            => _OperatingSystem ?? (_OperatingSystem = WMI.Query("SELECT * FROM Win32_OperatingSystem").First());
 
         /// <summary>
         /// Gets Windows ProductID as displayed in System Panel. 
@@ -571,10 +563,9 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         static int? _CpuSpeed;
         static DGuid _DeviceId;
         static double _MemoryTotal;
-        static LocalAccount _LogonUser;
-        static LocalAccount _CurrentProcessUser;
         static string _ProfilesDirectory;
         static string _LocalAppDataDirectory;
+        static dynamic _OperatingSystem;
         static double _SystemMemoryTotal;
         static byte[] _WindowsDigitalProductId;
         static string _WindowsProductId;
