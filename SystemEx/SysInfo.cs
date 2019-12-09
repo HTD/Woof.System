@@ -2,7 +2,6 @@
 using Microsoft.VisualBasic.Devices; // add to references.
 using Microsoft.Win32;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -11,7 +10,6 @@ using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.ServiceProcess; // add to references.
 using System.Text;
-using System.Threading;
 using Woof.SystemEx.Win32Types;
 using Woof.SystemEx.Win32Imports;
 
@@ -109,7 +107,7 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// <summary>
         /// Gets the local groups.
         /// </summary>
-        public static LocalGroup[] LocalGroups => GetLocalGroups();
+        public static IEnumerable<LocalGroup> LocalGroups => GetLocalGroups();
 
         /// <summary>
         /// Gets local AppData directory for current user, WORKS FROM SYSTEM ACCOUNT!
@@ -137,7 +135,7 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// <summary>
         /// Gets physical network interfaces MAC addresses (hex values delimited by ':').
         /// </summary>
-        public static string[] PhysicalMacs => WMI.Query("SELECT MACAddress FROM Win32_NetworkAdapterConfiguration WHERE MACAddress IS NOT NULL AND NOT Description LIKE \"%Virtual%\"").Select(i => (string)i.MACAddress).ToArray();
+        public static IEnumerable<string> PhysicalMacs => WMI.Query("SELECT MACAddress FROM Win32_NetworkAdapterConfiguration WHERE MACAddress IS NOT NULL AND NOT Description LIKE \"%Virtual%\"").Select(i => (string)i.MACAddress);
 
         /// <summary>
         /// Gets system disk serial number, should be unique for unique devices.
@@ -163,7 +161,7 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// <summary>
         /// Gets all normal, enabled user accounts on the local computer.
         /// </summary>
-        public static LocalAccount[] Users => GetLocalAccounts();
+        public static IEnumerable<LocalAccount> Users => GetLocalAccounts();
 
         /// <summary>
         /// Gets the operating system extended information from WMI.
@@ -264,8 +262,13 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// Gets the <see cref="SecurityIdentifier"/> for the user name in the system.
         /// </summary>
         /// <param name="userName">User name.</param>
+        /// <param name="stripDomain">Set true to strip the domain from the user name. Default false.</param>
         /// <returns>SID or null if the user name does not exist in the system.</returns>
-        public static SecurityIdentifier GetSecurityIdentifier(string userName) {
+        public static SecurityIdentifier GetSecurityIdentifier(string userName, bool stripDomain = false) {
+            if (stripDomain) {
+                var p = userName.IndexOf('\\');
+                if (p >= 0) userName = userName.Substring(p + 1);
+            }
             try {
                 return new NTAccount(userName).Translate(typeof(SecurityIdentifier)) as SecurityIdentifier;
             }
@@ -443,13 +446,20 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
 
         }
 
-        internal static LocalAccount[] GetLocalAccounts() {
+        /// <summary>
+        /// Gets all accounts. Full information, with FullName set.
+        /// </summary>
+        /// <param name="withDisabled">Set true to include disabled accounts. Default false.</param>
+        /// <returns>Accounts.</returns>
+        internal static IEnumerable<LocalAccount> GetLocalAccounts(bool withDisabled = false) {
             var buffer = IntPtr.Zero;
             try {
                 var status = NativeMethods.NetUserEnum(null, 20, NetApiFilter.NormalAccount, ref buffer, -1, out var read, out var total, IntPtr.Zero);
-                return ReadNetApi<UserInfo>(status, buffer, read)
-                    .Where(i => i.Flags.HasFlag(UserFlags.NormalAccount) && !i.Flags.HasFlag(UserFlags.AccountDisable) && !i.Name.EndsWith("$"))
-                    .Select(i => new LocalAccount(i)).ToArray();
+                var accounts = ReadNetApi<UserInfo>(status, buffer, read);
+                var normalAccounts = accounts.Where(i => i.Flags.HasFlag(UserFlags.NormalAccount) && !i.Name.EndsWith("$", StringComparison.Ordinal));
+                return withDisabled
+                    ? normalAccounts.Select(i => new LocalAccount(i))
+                    : normalAccounts.Where(i => !i.Flags.HasFlag(UserFlags.AccountDisable)).Select(i => new LocalAccount(i));
             }
             finally {
                 if (buffer != IntPtr.Zero) NativeMethods.NetApiBufferFree(buffer);
@@ -478,11 +488,11 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// Gets the local groups of the local computer.
         /// </summary>
         /// <returns>Local groups.</returns>
-        internal static LocalGroup[] GetLocalGroups() {
+        internal static IEnumerable<LocalGroup> GetLocalGroups() {
             var buffer = IntPtr.Zero;
             try {
                 var status = NativeMethods.NetLocalGroupEnum(null, 1, ref buffer, -1, out var read, out var total, IntPtr.Zero);
-                return ReadNetApi<LocalGroupInfo>(status, buffer, read).Select(i => new LocalGroup(i)).ToArray();
+                return ReadNetApi<LocalGroupInfo>(status, buffer, read).Select(i => new LocalGroup(i));
             }
             finally {
                 if (buffer != IntPtr.Zero) NativeMethods.NetApiBufferFree(buffer);

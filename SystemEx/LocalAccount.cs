@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Security.Principal;
+using Woof.SystemEx.Win32Imports;
 using Woof.SystemEx.Win32Types;
 
 namespace Woof.SystemEx {
@@ -21,7 +22,7 @@ namespace Woof.SystemEx {
         public string Domain { get; }
 
         /// <summary>
-        /// Gets the domain name backslash account name.
+        /// Gets the Windows account FullName property if available.
         /// </summary>
         public string FullName { get; }
 
@@ -40,34 +41,37 @@ namespace Woof.SystemEx {
         /// Creates <see cref="LocalAccount"/> from <see cref="LocalGroupMember"/>.
         /// </summary>
         /// <param name="member">Local group member.</param>
-        internal LocalAccount(LocalGroupMember member) {
-            FullName = member.DomainAndName;
-            Sid = new SecurityIdentifier(member.PSid);
-            var split = FullName.Split('\\');
-            Domain = split.First();
-            Name = split.Last();
-        }
+        internal LocalAccount(LocalGroupMember member) : this(new SecurityIdentifier(member.PSid)) { }
 
+        /// <summary>
+        /// Creates <see cref="LocalAccount"/> from <see cref="UserInfo"/> object.
+        /// </summary>
+        /// <param name="userInfo">Data structure returned from <see cref="NativeMethods.NetUserEnum"/> call.</param>
         internal LocalAccount(UserInfo userInfo) {
             Name = userInfo.Name;
             var account = new NTAccount(Name);
             Sid = account.Translate(typeof(SecurityIdentifier)) as SecurityIdentifier;
             account = Sid.Translate(typeof(NTAccount)) as NTAccount;
-            FullName = account.Value;
-            var split = FullName.Split('\\');
+            FullName = userInfo.FullName;
+            var split = account.Value.Split('\\');
             Domain = split.First();
         }
 
         /// <summary>
-        /// Creates <see cref="LocalAccount"/> from the full name (with domain).
+        /// Creates <see cref="LocalAccount"/> from the user name (with or without domain).
         /// </summary>
-        /// <param name="domainAndName">Domain backslash user name.</param>
-        public LocalAccount(string domainAndName) {
-            FullName = domainAndName;
-            var split = FullName.Split('\\');
-            Domain = split.First();
-            Name = split.Last();
-            Sid = SysInfo.GetSecurityIdentifier(Name);
+        /// <param name="userName">Either domain backslash user, or just user name.</param>
+        public LocalAccount(string userName) : this(SysInfo.GetSecurityIdentifier(userName, stripDomain: true)) {
+            if (Sid is null) {
+                var i = userName.IndexOf('\\');
+                if (i < 0) {
+                    Name = userName;
+                }
+                else {
+                    Name = userName.Substring(i + 1);
+                    Domain = userName.Substring(0, i);
+                }
+            }
         }
 
         /// <summary>
@@ -75,11 +79,11 @@ namespace Woof.SystemEx {
         /// </summary>
         /// <param name="domain">Domain.</param>
         /// <param name="name">User name.</param>
-        public LocalAccount(string domain, string name) {
-            Domain = domain;
-            Name = name;
-            FullName = $"{domain}\\{name}";
-            Sid = SysInfo.GetSecurityIdentifier(Name);
+        public LocalAccount(string domain, string name) : this(SysInfo.GetSecurityIdentifier(name)) {
+            if (Sid is null) {
+                Name = name;
+                Domain = domain;
+            }
         }
 
         /// <summary>
@@ -87,11 +91,12 @@ namespace Woof.SystemEx {
         /// </summary>
         /// <param name="sid"><see cref="SecurityIdentifier"/>.</param>
         public LocalAccount(SecurityIdentifier sid) {
-            Sid = sid;
-            FullName = Sid.Translate(typeof(NTAccount)).Value;
-            var split = FullName.Split('\\');
-            Domain = split.First();
-            Name = split.Last();
+            if (SysInfo.GetLocalAccounts(withDisabled: true).FirstOrDefault(i => i.Sid == sid) is LocalAccount account) {
+                Name = account.Name;
+                Domain = account.Domain;
+                FullName = account.FullName;
+                Sid = sid;
+            }
         }
 
         /// <summary>
