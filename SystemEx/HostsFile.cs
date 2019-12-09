@@ -140,7 +140,7 @@ namespace Woof.SystemEx {
         /// <summary>
         /// Gets the target file path.
         /// </summary>
-        private string Target => Path.Combine(Environment.SystemDirectory, "drivers", "etc", "hosts");
+        private static string Target => Path.Combine(Environment.SystemDirectory, "drivers", "etc", "hosts");
 
         /// <summary>
         /// Current token list.
