@@ -34,7 +34,7 @@ namespace Woof.SystemEx.Tests {
         [TestMethod]
         public void A02_Users() {
             Console.WriteLine("Users:");
-            foreach (var user in SysInfo.Users) Console.WriteLine($"  [{user.Sid}] => {user.Name} [{(user.IsAdmin ? "admin" : "user")}]");
+            foreach (var user in SysInfo.Users) Console.WriteLine($"  [{user.Sid}] => {user.FullName} [{(user.IsAdmin ? "admin" : "user")}]");
             Console.WriteLine();
             Console.WriteLine($"LogonUser.Sid = {SysInfo.LogonUser.Sid}");
             Console.WriteLine($"LogonUser.Name = {SysInfo.LogonUser.Name}");
@@ -50,18 +50,23 @@ namespace Woof.SystemEx.Tests {
             Console.WriteLine($"CurrentProcessUser.Domain = {SysInfo.CurrentProcessUser.Domain}");
             Console.WriteLine($"CurrentProcessUser.FullName = {SysInfo.CurrentProcessUser.FullName}");
             Console.WriteLine($"CurrentProcessUser.IsAdmin = {SysInfo.CurrentProcessUser.IsAdmin}");
+            var imaginaryUser = new LocalAccount("VOID\\NOONE");
+            Console.WriteLine();
+            Console.WriteLine($"Imaginary user name = {imaginaryUser.Name}");
+            Console.WriteLine($"Imaginary user domain = {imaginaryUser.Domain}");
+            Console.WriteLine($"Imaginary user full name = {imaginaryUser.FullName}");
         }
 
-        [TestMethod]
-        public void A03_UsersWMI() {
-            Console.WriteLine("UsersWMI:");
-            foreach (var user in SysInfo.UsersWMI) {
-                Console.WriteLine();
-                Console.WriteLine($"  {user.Name}:");
-                foreach (var p in user) Console.WriteLine($"    {p.Key} = {p.Value}");
-            }
-            Console.WriteLine();
-        }
+        //[TestMethod]
+        //public void A03_UsersWMI() {
+        //    Console.WriteLine("UsersWMI:");
+        //    foreach (var user in SysInfo.UsersWMI) {
+        //        Console.WriteLine();
+        //        Console.WriteLine($"  {user.Name}:");
+        //        foreach (var p in user) Console.WriteLine($"    {p.Key} = {p.Value}");
+        //    }
+        //    Console.WriteLine();
+        //}
 
         [TestMethod]
         public void A04_UserPicturePaths() {
