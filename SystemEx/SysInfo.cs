@@ -451,15 +451,15 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// </summary>
         /// <param name="withDisabled">Set true to include disabled accounts. Default false.</param>
         /// <returns>Accounts.</returns>
-        internal static IEnumerable<LocalAccount> GetLocalAccounts(bool withDisabled = false) {
+        internal static LocalAccount[] GetLocalAccounts(bool withDisabled = false) {
             var buffer = IntPtr.Zero;
             try {
                 var status = NativeMethods.NetUserEnum(null, 20, NetApiFilter.NormalAccount, ref buffer, -1, out var read, out var total, IntPtr.Zero);
                 var accounts = ReadNetApi<UserInfo>(status, buffer, read);
                 var normalAccounts = accounts.Where(i => i.Flags.HasFlag(UserFlags.NormalAccount) && !i.Name.EndsWith("$", StringComparison.Ordinal));
                 return withDisabled
-                    ? normalAccounts.Select(i => new LocalAccount(i))
-                    : normalAccounts.Where(i => !i.Flags.HasFlag(UserFlags.AccountDisable)).Select(i => new LocalAccount(i));
+                    ? normalAccounts.Select(i => new LocalAccount(i)).ToArray()
+                    : normalAccounts.Where(i => !i.Flags.HasFlag(UserFlags.AccountDisable)).Select(i => new LocalAccount(i)).ToArray();
             }
             finally {
                 if (buffer != IntPtr.Zero) NativeMethods.NetApiBufferFree(buffer);
@@ -488,11 +488,11 @@ namespace Woof.SystemEx { // depends on Woof.SysInternals.WMI, Woof.Identificati
         /// Gets the local groups of the local computer.
         /// </summary>
         /// <returns>Local groups.</returns>
-        internal static IEnumerable<LocalGroup> GetLocalGroups() {
+        internal static LocalGroup[] GetLocalGroups() {
             var buffer = IntPtr.Zero;
             try {
                 var status = NativeMethods.NetLocalGroupEnum(null, 1, ref buffer, -1, out var read, out var total, IntPtr.Zero);
-                return ReadNetApi<LocalGroupInfo>(status, buffer, read).Select(i => new LocalGroup(i));
+                return ReadNetApi<LocalGroupInfo>(status, buffer, read).Select(i => new LocalGroup(i)).ToArray();
             }
             finally {
                 if (buffer != IntPtr.Zero) NativeMethods.NetApiBufferFree(buffer);
