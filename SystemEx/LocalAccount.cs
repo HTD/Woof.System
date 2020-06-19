@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Security.Principal;
+
 using Woof.SystemEx.Win32Imports;
 using Woof.SystemEx.Win32Types;
 
@@ -51,7 +52,7 @@ namespace Woof.SystemEx {
             Name = userInfo.Name;
             var account = new NTAccount(Name);
             Sid = account.Translate(typeof(SecurityIdentifier)) as SecurityIdentifier;
-            account = Sid.Translate(typeof(NTAccount)) as NTAccount;
+            account = Sid?.Translate(typeof(NTAccount)) as NTAccount;
             FullName = userInfo.FullName;
             var split = account.Value.Split('\\');
             Domain = split.First();
@@ -103,20 +104,20 @@ namespace Woof.SystemEx {
         /// Returns string representation of the local account.
         /// </summary>
         /// <returns>String representation.</returns>
-        public override string ToString() => $"{FullName} {{{Sid.Value}}}";
+        public override string ToString() => $"{FullName} {{{Sid?.Value}}}";
 
         /// <summary>
         /// Equality test depending on SID only.
         /// </summary>
         /// <param name="obj">The other object.</param>
         /// <returns>True if SIDs are equal.</returns>
-        public override bool Equals(object obj) => (obj is LocalAccount a) && a.Sid.Equals(Sid);
+        public override bool Equals(object obj) => (obj is LocalAccount a) && (a?.Sid?.Equals(Sid) ?? false);
 
         /// <summary>
         /// Gets the hash code from SID for equality tests.
         /// </summary>
         /// <returns>Hash code.</returns>
-        public override int GetHashCode() => Sid.GetHashCode();
+        public override int GetHashCode() => Sid?.GetHashCode() ?? 0;
 
         /// <summary>
         /// Equality test based on SID equality only.
@@ -125,7 +126,7 @@ namespace Woof.SystemEx {
         /// <param name="b">That one.</param>
         /// <returns>True if SIDs are equal.</returns>
         public static bool operator ==(LocalAccount a, LocalAccount b) =>
-            (a is null && b is null) || a?.Sid.Equals(b?.Sid) == true;
+            (a is null && b is null) || a?.Sid?.Equals(b?.Sid) == true;
 
         /// <summary>
         /// Inequality test based on SID inequality only.
@@ -134,7 +135,7 @@ namespace Woof.SystemEx {
         /// <param name="b">That one.</param>
         /// <returns>True if SIDs are NOT equal.</returns>
         public static bool operator !=(LocalAccount a, LocalAccount b) =>
-            !(a is null && b is null) && a?.Sid.Equals(b?.Sid) != true;
+            !(a is null && b is null) && a?.Sid?.Equals(b?.Sid) != true;
 
     }
 
